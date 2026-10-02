@@ -2,18 +2,22 @@
 
 import { useState } from "react";
 
-export default function EntryGate({
-  onReady,
-}: {
-  onReady: (lat: number, lng: number) => void;
-}) {
+// A fixed scatter of "strangers" for the backdrop: computed once at module load
+// from a tiny seeded generator, so server and client render the same field.
+const FIELD = (() => {
+  let s = 7;
+  const r = () => ((s = (s * 9301 + 49297) % 233280) / 233280);
+  return Array.from({ length: 70 }, () => ({ x: r() * 100, y: r() * 100, t: 2 + r() * 4, d: -r() * 6, warm: r() > 0.7 }));
+})();
+
+export default function EntryGate({ onReady }: { onReady: (lat: number, lng: number) => void }) {
   const [status, setStatus] = useState<"idle" | "locating" | "error">("idle");
-  const [error, setError] = useState<string>("");
+  const [error, setError] = useState("");
 
   function enter() {
     if (!("geolocation" in navigator)) {
       setStatus("error");
-      setError("Your browser doesn't support location access.");
+      setError("Your browser can't share a location, so we can't place you on the map.");
       return;
     }
     setStatus("locating");
@@ -23,41 +27,68 @@ export default function EntryGate({
         setStatus("error");
         setError(
           err.code === err.PERMISSION_DENIED
-            ? "Location permission is required to place you on the map."
-            : "Couldn't get your location. Please try again.",
+            ? "Pulse needs your location to drop you on the map. Allow it in the address bar, then try again."
+            : "We couldn't find you just now. Check your connection and try again.",
         );
       },
-      // High accuracy + maximumAge:0 forces a fresh fix (Wi-Fi/GPS scan)
-      // instead of reusing the browser's cached IP-based location.
+      // High accuracy + maximumAge:0 forces a fresh fix instead of a cached IP guess.
       { enableHighAccuracy: true, timeout: 15_000, maximumAge: 0 },
     );
   }
 
   return (
-    <div className="flex min-h-full flex-1 flex-col items-center justify-center gap-8 bg-zinc-950 p-6 text-zinc-100">
-      <div className="text-center">
-        <h1 className="text-4xl font-bold tracking-tight">Pulse</h1>
-        <p className="mt-2 max-w-sm text-zinc-400">
-          A living globe of anonymous strangers. Drop onto the map and connect.
-        </p>
+    <main className="relative flex min-h-dvh flex-1 items-center justify-center overflow-hidden px-6 py-16">
+      <div className="entry-field" aria-hidden>
+        {FIELD.map((p, i) => (
+          <i key={i} style={{ left: `${p.x}%`, top: `${p.y}%`, ["--t" as string]: `${p.t}s`, ["--d" as string]: `${p.d}s`, ["--c" as string]: p.warm ? "var(--warm)" : "var(--pulse)" }} />
+        ))}
+        <div className="entry-rings">
+          <span /><span /><span />
+        </div>
       </div>
 
-      <button
-        onClick={enter}
-        disabled={status === "locating"}
-        className="rounded-full bg-emerald-400 px-8 py-3 font-semibold text-zinc-950 transition hover:bg-emerald-300 disabled:opacity-60"
-      >
-        {status === "locating" ? "Locating…" : "Enter Pulse"}
-      </button>
+      <div className="relative z-10 flex max-w-xl flex-col items-center text-center">
+        <p className="rise font-mono text-[11px] uppercase tracking-[0.32em] text-pulse">Pulse</p>
+        <h1 className="rise mt-5 font-serif text-5xl leading-[1.02] text-ink sm:text-7xl" style={{ animationDelay: "60ms" }}>
+          Someone, somewhere,
+          <br />
+          <em className="text-pulse">is awake right now.</em>
+        </h1>
+        <p className="rise mt-6 max-w-md text-base text-muted sm:text-lg" style={{ animationDelay: "120ms" }}>
+          Every glowing dot is a real stranger. Tap one to say hello. Text first, video only if you both say yes.
+        </p>
 
-      {status === "error" && (
-        <p className="max-w-sm text-center text-sm text-red-400">{error}</p>
-      )}
+        <button
+          onClick={enter}
+          disabled={status === "locating"}
+          className="rise group mt-10 inline-flex items-center gap-3 rounded-full bg-pulse px-8 py-4 text-base font-semibold text-bg shadow-[0_0_40px_-6px_var(--pulse)] transition hover:shadow-[0_0_60px_-4px_var(--pulse)] active:scale-[0.98] disabled:opacity-70"
+          style={{ animationDelay: "180ms" }}
+        >
+          {status === "locating" ? (
+            <>
+              <span className="h-4 w-4 rounded-full border-2 border-bg/30 border-t-bg" style={{ animation: "spin .8s linear infinite" }} />
+              Finding you…
+            </>
+          ) : (
+            <>
+              Drop onto the map
+              <span aria-hidden className="transition group-hover:translate-x-0.5">→</span>
+            </>
+          )}
+        </button>
 
-      <p className="max-w-sm text-center text-xs text-zinc-500">
-        No sign-up. Your dot is placed 1–3&nbsp;km from your real location.
-        Nothing is stored — closing the tab ends everything.
-      </p>
-    </div>
+        {status === "error" && (
+          <p role="alert" className="fade mt-5 max-w-sm rounded-2xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-ink">
+            {error}
+          </p>
+        )}
+
+        <ul className="rise mt-12 flex flex-wrap justify-center gap-2 text-xs text-muted" style={{ animationDelay: "240ms" }}>
+          {["No sign-up", "Your dot is fuzzed 1–3 km", "Chat & video are peer-to-peer", "Nothing is stored"].map((t) => (
+            <li key={t} className="rounded-full border border-line bg-white/[0.03] px-3 py-1.5">{t}</li>
+          ))}
+        </ul>
+      </div>
+    </main>
   );
 }
