@@ -6,7 +6,7 @@ import WorldMap from "./components/WorldMap";
 import ConnectionPrompt from "./components/ConnectionPrompt";
 import ChatPanel, { type ChatMessage } from "./components/ChatPanel";
 import VideoPanel from "./components/VideoPanel";
-import { join, leave, poll, sendSignal } from "@/lib/api";
+import { block, join, leave, poll, sendSignal } from "@/lib/api";
 import { PeerSession, type DescType, type PeerControl } from "@/lib/webrtc";
 import { POLL_INTERVAL_MS } from "@/lib/presence";
 import { type PeerDot, type SignalMsg } from "@/lib/types";
@@ -165,6 +165,13 @@ export default function Home() {
     setConn({ kind: "idle" });
   }
 
+  function blockPeer() {
+    const c = connRef.current;
+    if (c.kind === "idle") return;
+    void block(sessionId, c.peerId); // the server ends the call and tells them
+    teardown("Blocked. You won't see each other again this session.");
+  }
+
   function endConnection() {
     const c = connRef.current;
     if (c.kind === "connecting" || c.kind === "connected") {
@@ -252,14 +259,10 @@ export default function Home() {
       }
       case "end": {
         const c = connRef.current;
-        if (
-          (c.kind === "incoming" ||
-            c.kind === "connecting" ||
-            c.kind === "connected") &&
-          c.peerId === sig.fromId
-        ) {
+        if (c.kind !== "idle" && c.peerId === sig.fromId) {
           if (c.kind === "incoming") setConn({ kind: "idle" });
-          else teardown("Stranger disconnected.");
+          else if (c.kind === "requesting") teardown("They're not available right now.");
+          else teardown("The stranger left the conversation.");
         }
         break;
       }
@@ -323,46 +326,46 @@ export default function Home() {
   }
 
   const inChat = conn.kind === "connecting" || conn.kind === "connected";
+  const pill = "glass rise absolute left-1/2 top-20 z-30 flex -translate-x-1/2 items-center gap-3 rounded-full px-4 py-2.5 text-sm text-ink sm:top-6";
 
   return (
-    <main className="fixed inset-0 overflow-hidden">
-      <WorldMap
-        peers={peers}
-        me={myLocation}
-        onPeerClick={requestConnection}
-        canConnect={conn.kind === "idle"}
-      />
+    <main className="fixed inset-0 overflow-hidden bg-bg">
+      <WorldMap peers={peers} me={myLocation} onPeerClick={requestConnection} canConnect={conn.kind === "idle"} />
 
       {notice && (
-        <div className="absolute left-1/2 top-20 z-30 -translate-x-1/2 rounded-full bg-zinc-800/90 px-4 py-2 text-sm text-zinc-100 shadow-lg backdrop-blur">
+        <div role="status" className="glass rise absolute bottom-24 left-1/2 z-[60] -translate-x-1/2 rounded-full px-5 py-2.5 text-sm text-ink">
           {notice}
         </div>
       )}
 
       {conn.kind === "requesting" && (
-        <div className="absolute left-1/2 top-20 z-30 flex -translate-x-1/2 items-center gap-3 rounded-full bg-zinc-800/90 px-4 py-2 text-sm text-zinc-100 shadow-lg backdrop-blur">
-          <span>Requesting connection…</span>
-          <button
-            onClick={cancelRequest}
-            className="rounded-full bg-zinc-700 px-3 py-1 text-xs hover:bg-zinc-600"
-          >
-            Cancel
-          </button>
+        <div className={pill} role="status">
+          <span className="relative grid h-5 w-5 place-items-center">
+            <span className="absolute inset-0 rounded-full border border-pulse" style={{ animation: "ring 1.6s ease-out infinite" }} />
+            <span className="h-2 w-2 rounded-full bg-pulse" />
+          </span>
+          <span>Saying hi… waiting for them to answer</span>
+          <button onClick={cancelRequest} className="rounded-full border border-line px-3 py-1 text-xs text-muted transition hover:text-ink">Cancel</button>
         </div>
       )}
 
       {conn.kind === "incoming" && (
         <ConnectionPrompt
-          title="A stranger wants to connect"
-          acceptLabel="Accept"
-          declineLabel="Decline"
+          peerId={conn.peerId}
+          title="A stranger is saying hi"
+          subtitle="Accept to open a private text chat. Video only starts if you both agree."
+          acceptLabel="Say hi back"
+          declineLabel="Not now"
           onAccept={acceptIncoming}
           onDecline={declineIncoming}
+          onBlock={blockPeer}
+          seconds={REQUEST_TIMEOUT_MS / 1000}
         />
       )}
 
       {inChat && (
         <ChatPanel
+          peerId={conn.peerId}
           messages={messages}
           connected={conn.kind === "connected"}
           videoBusy={video !== "none"}
@@ -371,22 +374,24 @@ export default function Home() {
             addMessage(true, text);
           }}
           onStartVideo={startVideoRequest}
+          onBlock={blockPeer}
           onEnd={endConnection}
         />
       )}
 
       {video === "requesting" && (
-        <div className="absolute bottom-24 left-1/2 z-30 -translate-x-1/2 rounded-full bg-zinc-800/90 px-4 py-2 text-sm text-zinc-100 shadow-lg backdrop-blur">
-          Waiting for stranger to accept video…
+        <div className={pill} role="status">
+          <span className="h-4 w-4 rounded-full border-2 border-white/20 border-t-pulse" style={{ animation: "spin .8s linear infinite" }} />
+          Asking to start video…
         </div>
       )}
 
       {video === "incoming" && (
         <ConnectionPrompt
-          title="Start video call?"
-          subtitle="The stranger wants to turn on video."
-          acceptLabel="Accept"
-          declineLabel="Decline"
+          title="Start a video call?"
+          subtitle="Your camera turns on only if you accept. Their video arrives blurred until you choose to see it."
+          acceptLabel="Turn on video"
+          declineLabel="Keep it text"
           onAccept={acceptVideo}
           onDecline={declineVideo}
         />
@@ -397,6 +402,8 @@ export default function Home() {
           localStream={localStream}
           remoteStream={remoteStream}
           onEnd={endVideo}
+          onToggleMic={(on) => peerRef.current?.setTrackEnabled("audio", on)}
+          onToggleCam={(on) => peerRef.current?.setTrackEnabled("video", on)}
         />
       )}
     </main>

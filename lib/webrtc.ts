@@ -156,6 +156,11 @@ export class PeerSession {
     return this.localStream;
   }
 
+  // Mute / hide without renegotiating: the track keeps flowing, just silent/black.
+  setTrackEnabled(kind: "audio" | "video", on: boolean) {
+    this.localStream?.getTracks().filter((t) => t.kind === kind).forEach((t) => (t.enabled = on));
+  }
+
   stopVideo() {
     if (this.localStream) {
       for (const track of this.localStream.getTracks()) track.stop();

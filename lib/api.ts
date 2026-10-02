@@ -49,3 +49,12 @@ export function leave(id: string): void {
     });
   }
 }
+
+// Block a stranger for the rest of this session (ends any call with them).
+export async function block(id: string, target: string): Promise<void> {
+  await fetch("/api/block", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id, target }),
+  });
+}
