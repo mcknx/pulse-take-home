@@ -70,13 +70,14 @@ export async function POST(request: NextRequest) {
 
   // Busy transitions:
   // - accept: the connection is now active → mark BOTH peers busy.
-  // - decline/end: free both peers.
+  // - end: free both peers. (decline must NOT: a user already in a chat
+  //   auto-declines incoming requests, and that would mark them free.)
   if (signalType === "accept") {
     await prisma.presence.updateMany({
       where: { id: { in: [fromId, toId] } },
       data: { busy: true },
     });
-  } else if (signalType === "decline" || signalType === "end") {
+  } else if (signalType === "end") {
     await prisma.presence.updateMany({
       where: { id: { in: [fromId, toId] } },
       data: { busy: false },
