@@ -49,6 +49,7 @@ export default function Home() {
   };
 
   const peerRef = useRef<PeerSession | null>(null);
+  const locationRef = useRef<{ lat: number; lng: number } | null>(null);
   const msgId = useRef(0);
   const requestTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -281,7 +282,14 @@ export default function Home() {
         if (!active) return;
         setPeers(data.peers);
         for (const s of data.signals) processSignalRef.current(s);
-      } catch {}
+      } catch (e) {
+        // 409 = the server reaped us (tab slept past the heartbeat). Re-join
+        // with the same location so the dot comes back instead of going dark.
+        if (String(e).includes("409") && locationRef.current) {
+          const { lat, lng } = locationRef.current;
+          await join(sessionId, lat, lng).catch(() => {});
+        }
+      }
       if (active) timer = setTimeout(tick, POLL_INTERVAL_MS);
     };
     tick();
@@ -304,6 +312,7 @@ export default function Home() {
   }, [sessionId, phase]);
 
   async function handleReady(lat: number, lng: number) {
+    locationRef.current = { lat, lng };
     setMyLocation({ lat, lng });
     await join(sessionId, lat, lng);
     setPhase("live");
