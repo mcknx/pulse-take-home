@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { isSessionId } from "@/lib/ids";
+import { allow, tooMany } from "@/lib/rate";
 import type { SignalType } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -49,6 +50,8 @@ export async function POST(request: NextRequest) {
   const reject = (error: string, status = 409) => Response.json({ error }, { status });
 
   if (signalType === "request") {
+    // Connection requests per user per minute: no spamming everyone on the map.
+    if (!(await allow(`request:${me.id}`, 8))) return tooMany();
     if (!target || target.id === me.id) {
       // Target went offline — tell the initiator it was declined.
       await prisma.signal.create({ data: { fromId: toId, toId: me.id, type: "decline" } });

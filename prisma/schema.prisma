@@ -45,3 +45,14 @@ model Block {
   @@id([blockerId, blockedId])
   @@index([blockedId])
 }
+
+model RateHit {
+  // One row per rate-limited action. Counted over a sliding minute, swept after 5 min.
+  // ponytail: a Postgres counter is fine at take-home scale; Upstash/Vercel KV or the
+  // Vercel firewall is the upgrade when traffic grows.
+  id  String   @id @default(uuid())
+  key String // e.g. "join:<sha256(ip)>" or "request:<session id>"
+  at  DateTime @default(now())
+
+  @@index([key, at])
+}

@@ -100,3 +100,15 @@ test("block: ends the call, hides both ways, and stops new requests", async () =
   assert.ok((await poll(c.id)).peers.some((p) => p.id === a.pub), "everyone else still sees a");
   for (const u of [a, b, c]) await leave(u);
 });
+
+test("rate limit: a user can't spam connection requests", async () => {
+  const a = await join();
+  const others = []; for (let i = 0; i < 10; i++) others.push(await join());
+  const codes = [];
+  for (const o of others) {
+    const r = await signal(a, o.pub, "request"); codes.push(r.status);
+    await signal(a, o.pub, "end"); // cancel, so the next request is allowed by pairing rules
+  }
+  assert.ok(codes.includes(429), `expected a 429 within 10 requests/min, got ${codes.join(",")}`);
+  for (const u of [a, ...others]) await leave(u);
+});

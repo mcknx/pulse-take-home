@@ -37,6 +37,7 @@ export async function GET(request: NextRequest) {
   await prisma.signal.deleteMany({ where: { createdAt: { lt: signalCutoff } } });
   // ponytail: blocks are swept by age, not by the blocker going stale; fine
   // because a session id is never reused. Join-time cleanup if this grows.
+  await prisma.rateHit.deleteMany({ where: { at: { lt: new Date(now - 5 * 60_000) } } });
   await prisma.block.deleteMany({ where: { createdAt: { lt: new Date(now - BLOCK_TTL_MS) } } });
 
   // If my peer was reaped (tab closed without a clean leave), free me.

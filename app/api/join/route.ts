@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { applyPrivacyOffset, isValidLatLng } from "@/lib/geo";
 import { isSessionId } from "@/lib/ids";
+import { allow, ipKey, tooMany } from "@/lib/rate";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,6 +26,9 @@ export async function POST(request: NextRequest) {
   if (!isValidLatLng(lat, lng)) {
     return Response.json({ error: "invalid coordinates" }, { status: 400 });
   }
+
+  // New sessions per IP per minute: stops one machine flooding the map with fake dots.
+  if (!(await allow(`join:${ipKey(request)}`, 60))) return tooMany();
 
   // The offset is drawn ONCE per session. Re-drawing it on every join would let
   // an observer average many offset dots of the same user back to the real spot.

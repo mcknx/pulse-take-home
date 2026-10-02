@@ -3,7 +3,7 @@
 **Live:** https://pulse-take-home-ten.vercel.app · **Repo:** https://github.com/mcknx/pulse-take-home
 
 **Tests:**
-- `BASE=<url> npm test`: 8 API checks against a running server.
+- `BASE=<url> npm test`: 9 API checks against a running server.
 - `BASE=<url> node tests/e2e-two-users.mjs`: two real browsers with fake cameras, from joining through blocking. Screenshots go to `docs/proof/`.
 - Both pass against the live deployment.
 
@@ -46,8 +46,10 @@ Ranked by impact:
 5. **Medium: leaving left the peer stuck busy.** **Fixed:** leave sends `end` and frees the peer; a reaped peer frees the survivor on their next poll.
 6. **Low: browser hardening.** Added `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy`, a `Permissions-Policy` limiting camera/mic/location to this origin, HSTS, and no `x-powered-by`.
 
+7. **Medium: no rate limiting.** One machine could flood the map with fake dots or spam everyone with requests. **Fixed:** a Postgres-backed sliding-minute limit (serverless has no shared memory): 60 new sessions per IP (stored as a SHA-256 hash, never the raw IP) and 8 connection requests per user. Over the limit returns 429 with `Retry-After`.
+
 **Not fixed (and why):**
-- **No rate limiting per IP.** Serverless has no shared memory; it needs Upstash/Vercel KV or the platform firewall. Next step.
+- **Rate limits live in Postgres.** Fine at this scale; at real traffic, Upstash/Vercel KV or the Vercel firewall should take this off the database.
 - **WebRTC reveals each peer's IP to the other.** That's inherent to peer-to-peer with STUN only. A TURN relay (forced relay) would hide it.
 - The Mapbox token is public by design; restrict it to the deployed URL in the Mapbox dashboard.
 
