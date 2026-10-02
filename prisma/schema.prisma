@@ -12,10 +12,12 @@ datasource db {
 }
 
 model Presence {
-  id       String   @id // client-generated session uuid
+  id       String   @id // client-generated session uuid — a SECRET, never sent to other clients
+  pubId    String   @unique @default(uuid()) // the only id other clients ever see
   lat      Float // ALREADY privacy-offset coords (raw is never stored)
   lng      Float
   busy     Boolean  @default(false) // true while in an active connection
+  peerId   String? // secret id of the one peer this user is requesting / connected to
   lastSeen DateTime
 
   @@index([lastSeen])
@@ -24,8 +26,8 @@ model Presence {
 model Signal {
   // Mailbox for connection requests + WebRTC signaling only.
   id        String   @id @default(uuid())
-  toId      String // recipient session id
-  fromId    String // sender session id
+  toId      String // recipient's SECRET session id (the mailbox key)
+  fromId    String // sender's PUBLIC id (pubId) — safe to hand to the recipient
   type      String // request | accept | decline | offer | answer | ice | end
   payload   String? // JSON string (SDP / ICE candidate)
   createdAt DateTime @default(now())

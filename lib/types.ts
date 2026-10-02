@@ -11,7 +11,7 @@ export type SignalType =
   | "end"; // hang up / leave the connection
 
 export interface PeerDot {
-  id: string;
+  id: string; // public id — never a session id
   lat: number;
   lng: number;
   busy: boolean;
@@ -19,8 +19,7 @@ export interface PeerDot {
 
 export interface SignalMsg {
   id: string;
-  fromId: string;
-  toId: string;
+  fromId: string; // sender's public id
   type: SignalType;
   payload: string | null;
   createdAt: string;
