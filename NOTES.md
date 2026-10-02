@@ -1,6 +1,11 @@
 # NOTES — Pulse take-home
 
-**Live:** _(Vercel URL)_ · **Tests:** `BASE=http://localhost:3000 npm test` (8 API checks against a running server)
+**Live:** https://pulse-take-home-ten.vercel.app · **Repo:** https://github.com/mcknx/pulse-take-home
+
+**Tests:**
+- `BASE=<url> npm test`: 8 API checks against a running server.
+- `BASE=<url> node tests/e2e-two-users.mjs`: two real browsers with fake cameras, from joining through blocking. Screenshots go to `docs/proof/`.
+- Both pass against the live deployment.
 
 Commits follow the phases: `fix(...)` = Phase 1, `design:` = Phase 2, `security:` / `privacy:` = Phase 3, `feat(safety)` = Phase 4.
 
@@ -59,6 +64,8 @@ How I chose it: I used jev (TypeSafe's judgment model) to compare five candidate
 **Next, with more time:** a short-lived "someone just connected" ripple on the globe (it makes the world feel alive without revealing who); reports that feed a moderation queue; and an auto-blur that re-blurs video when the stranger's camera suddenly changes scene.
 
 ## Engineering notes
+
+- **Found while testing on the real map:** stranger dots were pinned to the top-left corner. Mapbox positions the marker with `transform`, and the dot's own animation overwrote it. Fixed with a wrapper element.
 
 - **Prisma 7 / Next 16:** migrations live in `prisma/migrations` (two new ones: `pubId`/`peerId` and `Block`). The `pubId` migration clears `Presence` first, which is fine because those rows only live for 15 s.
 - **Tests:** `tests/api.test.mjs` drives the real API with several fake users: stale dots disappear, `end` frees both users, a stranger can't inject signals or hang up a call, leaving mid-call frees the peer, block works both ways, and bad input is rejected.
