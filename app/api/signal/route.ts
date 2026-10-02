@@ -60,7 +60,10 @@ export async function POST(request: NextRequest) {
       data: { peerId: target.id },
     });
     if (claimed.count === 0) return reject("already in a connection");
-    if (target.busy || target.peerId) {
+    const blocked = await prisma.block.findFirst({
+      where: { OR: [{ blockerId: target.id, blockedId: me.pubId }, { blockerId: me.id, blockedId: target.pubId }] },
+    });
+    if (blocked || target.busy || target.peerId) {
       await prisma.presence.update({ where: { id: me.id }, data: { peerId: null } });
       await prisma.signal.create({ data: { fromId: target.pubId, toId: me.id, type: "decline" } });
       return Response.json({ ok: true, autoDeclined: true });

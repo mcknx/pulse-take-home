@@ -85,3 +85,18 @@ test("input validation: bad ids, oversized payload, unknown poller", async () =>
   assert.equal((await signal(a, b.pub, "offer", "x".repeat(20_000))).status, 400);
   await leave(a); await leave(b);
 });
+
+test("block: ends the call, hides both ways, and stops new requests", async () => {
+  const a = await join(), b = await join(), c = await join();
+  await signal(a, b.pub, "request"); await signal(b, a.pub, "accept");
+  await poll(a.id);
+  assert.equal((await post("/api/block", { id: b.id, target: a.pub })).status, 200);
+  assert.ok((await poll(a.id)).signals.some((s) => s.type === "end" && s.fromId === b.pub), "a is told the call ended");
+  assert.ok(!(await poll(b.id)).peers.some((p) => p.id === a.pub), "b no longer sees a");
+  assert.ok(!(await poll(a.id)).peers.some((p) => p.id === b.pub), "a no longer sees b");
+  await signal(a, b.pub, "request");
+  assert.equal((await poll(a.id)).signals.at(-1).type, "decline", "a's new request is auto-declined");
+  assert.ok(!(await poll(b.id)).signals.some((s) => s.type === "request"), "b never sees it");
+  assert.ok((await poll(c.id)).peers.some((p) => p.id === a.pub), "everyone else still sees a");
+  for (const u of [a, b, c]) await leave(u);
+});

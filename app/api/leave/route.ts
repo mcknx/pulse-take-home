@@ -34,6 +34,7 @@ export async function POST(request: NextRequest) {
   await prisma.signal.deleteMany({
     where: { OR: [{ toId: id }, ...(me ? [{ fromId: me.pubId, type: { not: "end" } }] : [])] },
   });
+  await prisma.block.deleteMany({ where: { blockerId: id } });
   await prisma.presence.deleteMany({ where: { id } });
 
   return Response.json({ ok: true });

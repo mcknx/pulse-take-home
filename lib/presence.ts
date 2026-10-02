@@ -8,3 +8,6 @@ export const SIGNAL_TTL_MS = 60_000;
 
 // Client poll interval. Kept here so client + server reason about the same cadence.
 export const POLL_INTERVAL_MS = 1_500;
+
+// Blocks only need to outlive a session (nobody keeps a tab open this long).
+export const BLOCK_TTL_MS = 12 * 60 * 60_000;

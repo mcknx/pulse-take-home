@@ -34,3 +34,14 @@ model Signal {
 
   @@index([toId])
 }
+
+model Block {
+  // "Never connect me with this stranger again" — for the rest of the session.
+  // Deleted when the blocker leaves or goes stale, like everything else here.
+  blockerId String // blocker's SECRET session id
+  blockedId String // blocked user's PUBLIC id
+  createdAt DateTime @default(now())
+
+  @@id([blockerId, blockedId])
+  @@index([blockedId])
+}
