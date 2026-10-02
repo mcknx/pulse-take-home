@@ -4,16 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import "mapbox-gl/dist/mapbox-gl.css";
 import type { Map as MapboxMap, Marker } from "mapbox-gl";
 import type { PeerDot } from "@/lib/types";
+import { hueOf } from "@/lib/orb";
 
 const TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
-
-function dotColor(id: string): string {
-  let hash = 0;
-  for (let i = 0; i < id.length; i++) {
-    hash = (hash * 31 + id.charCodeAt(i)) | 0;
-  }
-  return `hsl(${Math.abs(hash) % 360}, 70%, 60%)`;
-}
 
 export default function WorldMap({
   peers,
@@ -31,6 +24,7 @@ export default function WorldMap({
   const markersRef = useRef<Map<string, Marker>>(new Map());
   const meMarkerRef = useRef<Marker | null>(null);
   const [ready, setReady] = useState(false);
+  const [mapError, setMapError] = useState(false);
 
   // Marker click handlers are bound once, so read the live click handler +
   // connectability through refs (synced in an effect, never during render).
@@ -41,7 +35,7 @@ export default function WorldMap({
     canConnectRef.current = canConnect;
   });
 
-  // Initialise the map once.
+  // Initialise the map once: a night globe that swings round and flies to you.
   useEffect(() => {
     if (!TOKEN || !containerRef.current) return;
     let cancelled = false;
@@ -54,13 +48,28 @@ export default function WorldMap({
       const map = new mapboxgl.Map({
         container: containerRef.current,
         style: "mapbox://styles/mapbox/dark-v11",
-        // Open centered on the user if we know where they are, else world view.
-        center: me ? [me.lng, me.lat] : [0, 20],
-        zoom: me ? 4 : 1.4,
+        projection: "globe",
+        center: me ? [me.lng - 40, me.lat] : [0, 20],
+        zoom: 1.6,
         attributionControl: true,
       });
+      map.on("error", (e) => {
+        if (String(e?.error?.message ?? "").match(/token|401|403/i)) setMapError(true);
+      });
+      map.on("style.load", () => {
+        map.setFog({
+          color: "rgb(12, 16, 28)",
+          "high-color": "rgb(26, 44, 74)",
+          "horizon-blend": 0.06,
+          "space-color": "rgb(4, 6, 12)",
+          "star-intensity": 0.55,
+        });
+      });
       map.on("load", () => {
-        if (!cancelled) setReady(true);
+        if (cancelled) return;
+        setReady(true);
+        // Arrive: swing the globe round to the user, like dropping in.
+        if (me) map.flyTo({ center: [me.lng, me.lat], zoom: 3.2, duration: 3200, curve: 1.6, essential: true });
       });
       mapRef.current = map;
     })();
@@ -79,29 +88,24 @@ export default function WorldMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Show / move the user's own "you are here" pin.
+  // The user's own marker: a soft mint beacon (never the raw spot for others — it's local only).
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready || !me) return;
     let cancelled = false;
-
     (async () => {
       const mapboxgl = (await import("mapbox-gl")).default;
       if (cancelled) return;
       if (!meMarkerRef.current) {
         const el = document.createElement("div");
         el.className = "pulse-me";
-        el.title = "You are here";
-        el.innerHTML = `<span class="pulse-me-label">Me</span>📍`;
-        // anchor "bottom" → the pin's tip sits on the exact coordinate.
-        meMarkerRef.current = new mapboxgl.Marker({ element: el, anchor: "bottom" })
-          .setLngLat([me.lng, me.lat])
-          .addTo(map);
+        el.setAttribute("aria-label", "You");
+        el.innerHTML = `<span class="pulse-me-label">You</span>`;
+        meMarkerRef.current = new mapboxgl.Marker({ element: el }).setLngLat([me.lng, me.lat]).addTo(map);
       } else {
         meMarkerRef.current.setLngLat([me.lng, me.lat]);
       }
     })();
-
     return () => {
       cancelled = true;
     };
@@ -125,18 +129,20 @@ export default function WorldMap({
         if (!marker) {
           const el = document.createElement("button");
           el.className = "pulse-dot";
-          el.style.background = dotColor(peer.id);
-          el.title = "Tap to connect";
+          el.dataset.new = "true";
+          el.style.setProperty("--c", `hsl(${hueOf(peer.id)} 90% 64%)`);
+          el.style.setProperty("--d", `${-(hueOf(peer.id) % 24) / 10}s`);
           el.addEventListener("click", (e) => {
             e.stopPropagation();
-            if (canConnectRef.current) onPeerClickRef.current(peer.id);
+            if (canConnectRef.current && el.dataset.busy !== "true") onPeerClickRef.current(peer.id);
           });
-          marker = new mapboxgl.Marker({ element: el })
-            .setLngLat([peer.lng, peer.lat])
-            .addTo(map);
+          marker = new mapboxgl.Marker({ element: el }).setLngLat([peer.lng, peer.lat]).addTo(map);
           markers.set(peer.id, marker);
         }
-        marker.getElement().style.opacity = peer.busy ? "0.35" : "1";
+        const el = marker.getElement();
+        el.dataset.busy = String(peer.busy);
+        el.title = peer.busy ? "In a conversation" : "Tap to say hi";
+        el.setAttribute("aria-label", peer.busy ? "Stranger, busy" : "Stranger, tap to connect");
       }
 
       // Drop markers for peers that went offline / got filtered out.
@@ -153,24 +159,42 @@ export default function WorldMap({
     };
   }, [peers, ready]);
 
+  const free = peers.filter((p) => !p.busy).length;
+
   return (
     <div className="absolute inset-0">
-      <div ref={containerRef} className="h-full w-full bg-zinc-900" />
+      <div ref={containerRef} className="h-full w-full bg-bg" />
 
-      {!TOKEN && (
+      {(!TOKEN || mapError) && (
         <div className="absolute inset-0 flex items-center justify-center p-6 text-center">
-          <p className="max-w-md rounded-lg bg-zinc-800 p-4 text-sm text-zinc-200">
-            Set{" "}
-            <code className="text-emerald-400">NEXT_PUBLIC_MAPBOX_TOKEN</code> in{" "}
-            <code>.env</code> to load the map.
+          <p className="glass max-w-md rounded-2xl p-5 text-sm text-ink">
+            The map needs a Mapbox token. Set <code className="text-pulse">NEXT_PUBLIC_MAPBOX_TOKEN</code> in{" "}
+            <code>.env</code> (and in Vercel), then reload.
           </p>
         </div>
       )}
 
-      {/* Online count */}
-      <div className="absolute bottom-4 left-4 rounded-full bg-zinc-900/80 px-3 py-1.5 text-xs text-zinc-300 backdrop-blur">
-        {peers.length} online
+      {/* HUD */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between p-4 sm:p-6">
+        <div className="glass pointer-events-auto flex items-center gap-3 rounded-full py-2 pl-4 pr-5">
+          <span className="font-mono text-[11px] uppercase tracking-[0.28em] text-pulse">Pulse</span>
+          <span className="h-4 w-px bg-line" />
+          <span className="live-dot" aria-hidden />
+          <span className="text-sm text-ink" aria-live="polite">
+            <b className="font-semibold">{peers.length}</b> <span className="text-muted">{peers.length === 1 ? "stranger" : "strangers"} online</span>
+          </span>
+        </div>
       </div>
+
+      {canConnect && (
+        <p className="pointer-events-none absolute inset-x-0 bottom-8 text-center text-sm text-muted fade">
+          {peers.length === 0
+            ? "It's quiet right now. Open Pulse in a second window to meet yourself."
+            : free === 0
+              ? "Everyone's mid-conversation. Hang on a moment."
+              : "Tap a glowing dot to say hello."}
+        </p>
+      )}
     </div>
   );
 }
