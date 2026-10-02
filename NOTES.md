@@ -63,6 +63,20 @@ How I chose it: I used jev (TypeSafe's judgment model) to compare five candidate
 
 **Next, with more time:** a short-lived "someone just connected" ripple on the globe (it makes the world feel alive without revealing who); reports that feed a moderation queue; and an auto-blur that re-blurs video when the stranger's camera suddenly changes scene.
 
+## Assumptions & trade-offs
+
+**Assumptions**
+- "Nothing stored" means no chat or video content and no history. Short-lived presence, signaling and session blocks in Postgres are acceptable because they are swept within seconds to hours.
+- A session id generated on the client is fine as a bearer secret, as long as it never leaves its owner. I didn't add accounts, because the brief says no sign-up.
+- STUN-only is acceptable, per the README. I didn't add TURN.
+
+**Trade-offs**
+- **Kept HTTP polling** (1.5 s), not WebSockets or a realtime service. It's the brief's design and it works on Vercel serverless. The cost is about 1 request per 1.5 s per user. A managed realtime channel is the next step at scale.
+- **Enforced pairing on the server with compare-and-set row updates**, not transactions, because interactive transactions are unreliable through Neon's PgBouncer pooler.
+- **Blocks expire by age** (12 h) rather than being tied to presence rows. Simpler, and a session id is never reused.
+- **The blur is client-side.** It protects the viewer's own eyes, which is the goal. It isn't moderation: the stranger's video still reaches the device.
+- **Phase 4 is scoped to safety** rather than adding both safety and "alive" features, so it ships working and tested in the time box.
+
 ## Engineering notes
 
 - **Found while testing on the real map:** stranger dots were pinned to the top-left corner. Mapbox positions the marker with `transform`, and the dot's own animation overwrote it. Fixed with a wrapper element.
