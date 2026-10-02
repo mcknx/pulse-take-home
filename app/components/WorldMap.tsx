@@ -98,9 +98,8 @@ export default function WorldMap({
       if (cancelled) return;
       if (!meMarkerRef.current) {
         const el = document.createElement("div");
-        el.className = "pulse-me";
         el.setAttribute("aria-label", "You");
-        el.innerHTML = `<span class="pulse-me-label">You</span>`;
+        el.innerHTML = `<div class="pulse-me"><span class="pulse-me-label">You</span></div>`;
         meMarkerRef.current = new mapboxgl.Marker({ element: el }).setLngLat([me.lng, me.lat]).addTo(map);
       } else {
         meMarkerRef.current.setLngLat([me.lng, me.lat]);
@@ -127,6 +126,10 @@ export default function WorldMap({
         seen.add(peer.id);
         let marker = markers.get(peer.id);
         if (!marker) {
+          // Mapbox positions the marker element with `transform`, so the
+          // animated dot lives INSIDE a plain wrapper; animating the element
+          // itself would overwrite its position and pin it to the corner.
+          const wrap = document.createElement("div");
           const el = document.createElement("button");
           el.className = "pulse-dot";
           el.dataset.new = "true";
@@ -136,10 +139,11 @@ export default function WorldMap({
             e.stopPropagation();
             if (canConnectRef.current && el.dataset.busy !== "true") onPeerClickRef.current(peer.id);
           });
-          marker = new mapboxgl.Marker({ element: el }).setLngLat([peer.lng, peer.lat]).addTo(map);
+          wrap.appendChild(el);
+          marker = new mapboxgl.Marker({ element: wrap }).setLngLat([peer.lng, peer.lat]).addTo(map);
           markers.set(peer.id, marker);
         }
-        const el = marker.getElement();
+        const el = marker.getElement().firstElementChild as HTMLElement;
         el.dataset.busy = String(peer.busy);
         el.title = peer.busy ? "In a conversation" : "Tap to say hi";
         el.setAttribute("aria-label", peer.busy ? "Stranger, busy" : "Stranger, tap to connect");
